@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simply Supported Beam Calculator</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        /* Add your styles here */
+    </style>
+</head>
+<body>
+    <h1>Simply Supported Beam Calculator</h1>
+
+    <form id="inputForm">
+        <label for="beamLength">Beam Length (m): </label>
+        <input type="number" id="beamLength" required>
+
+        <label for="loadType">Load Type: </label>
+        <select id="loadType" onchange="showInputFields()">
+            <option value="pointLoad">Point Load</option>
+            <option value="udl">UDL (Uniformly Distributed Load)</option>
+        </select>
+
+        <div id="pointLoadFields" style="display: none;">
+            <label for="pointLoadValue">Point Load Value (kN): </label>
+            <input type="number" id="pointLoadValue" step="0.1">
+
+            <label for="pointLoadLocation">Point Load Location (m): </label>
+            <input type="number" id="pointLoadLocation" step="0.1">
+        </div>
+
+        <div id="udlFields" style="display: none;">
+            <label for="udlValue">UDL Value (kN/m): </label>
+            <input type="number" id="udlValue" step="0.1">
+
+            <label for="udlStart">UDL Start Location (m): </label>
+            <input type="number" id="udlStart" step="0.1">
+
+            <label for="udlEnd">UDL End Location (m): </label>
+            <input type="number" id="udlEnd" step="0.1">
+        </div>
+
+        <button type="button" onclick="calculate()">Calculate</button>
+    </form>
+
+    <div id="results"></div>
+    <div id="shearForceDiagram"></div>
+    <div id="bendingMomentDiagram"></div>
+
+    <script>
+        function showInputFields() {
+            const loadType = document.getElementById("loadType").value;
+            const pointLoadFields = document.getElementById("pointLoadFields");
+            const udlFields = document.getElementById("udlFields");
+
+            if (loadType === "pointLoad") {
+                pointLoadFields.style.display = "block";
+                udlFields.style.display = "none";
+            } else if (loadType === "udl") {
+                pointLoadFields.style.display = "none";
+                udlFields.style.display = "block";
+            }
+        }
+
+        function calculate() {
+            const beamLength = parseFloat(document.getElementById("beamLength").value);
+            const loadType = document.getElementById("loadType").value;
+
+            let result = {};
+
+            if (loadType === "pointLoad") {
+                const pointLoadValue = parseFloat(document.getElementById("pointLoadValue").value);
+                const pointLoadLocation = parseFloat(document.getElementById("pointLoadLocation").value);
+                result = calculatePointLoad(beamLength, pointLoadValue, pointLoadLocation);
+            } else if (loadType === "udl") {
+                const udlValue = parseFloat(document.getElementById("udlValue").value);
+                const udlStart = parseFloat(document.getElementById("udlStart").value);
+                const udlEnd = parseFloat(document.getElementById("udlEnd").value);
+                result = calculateUDL(beamLength, udlValue, udlStart, udlEnd);
+            }
+
+            displayResults(result);
+        }
+
+        function calculatePointLoad(beamLength, pointLoadValue, pointLoadLocation) {
+            const reactionA = (pointLoadValue * (beamLength - pointLoadLocation)) / beamLength;
+            const reactionB = pointLoadValue - reactionA;
+            const maxShearForce = Math.abs(reactionA);
+            const maxBendingMoment = Math.abs(reactionA) * pointLoadLocation;
+
+            return { reactionA, reactionB, maxShearForce, maxBendingMoment, beamLength, pointLoadLocation };
+        }
+
+        function calculateUDL(beamLength, udlValue, udlStart, udlEnd) {
+            const length = udlEnd - udlStart;
+            const reactionA = (udlValue * length) / 2;
+            const reactionB = reactionA;
+            const maxShearForce = Math.abs(reactionA);
+            const maxBendingMoment = Math.abs(reactionA) * (length / 2 + udlStart);
+
+            return { reactionA, reactionB, maxShearForce, maxBendingMoment, beamLength, pointLoadLocation: udlStart };
+        }
+
+        function displayResults(result) {
+            const resultsDiv = document.getElementById("results");
+
+            resultsDiv.innerHTML = `
+                <h2>Results</h2>
+                <p>Reaction at Support A: ${result.reactionA.toFixed(2)} kN</p>
+                <p>Reaction at Support B: ${result.reactionB.toFixed(2)} kN</p>
+                <p>Maximum Shear Force: ${result.maxShearForce.toFixed(2)} kN</p>
+                <p>Maximum Bending Moment: ${result.maxBendingMoment.toFixed(2)} kNm</p>
+            `;
+
+            const shearForceData = getShearForceData(result);
+            const bendingMomentData = getBendingMomentData(result);
+
+            drawDiagrams(shearForceData, bendingMomentData);
+        }
+
+        function getShearForceData(result) {
+            const positions = [0, result.pointLoadLocation, result.beamLength];
+            const shearForces = [result.reactionA, result.reactionA, result.reactionB];
+
+            return [{
+                type: 'scatter',
+                x: positions,
+                y: shearForces,
+                mode: 'lines+markers',
+                name: 'Shear Force'
+            }];
+        }
+
+        function getBendingMomentData(result) {
+            const positions = [0, result.pointLoadLocation, result.beamLength];
+            const bendingMoments = [0, -result.maxBendingMoment, 0];
+
+            return [{
+                type: 'scatter',
+                x: positions,
+                y: bendingMoments,
+                mode: 'lines+markers',
+                name: 'Bending Moment'
+            }];
+        }
+
+        function drawDiagrams(shearForceData, bendingMomentData) {
+            Plotly.newPlot('shearForceDiagram', shearForceData, {
+                title: 'Shear Force Diagram',
+                xaxis: { title: 'Position (m)' },
+                yaxis: { title: 'Shear Force (kN)' }
+            });
+
+            Plotly.newPlot('bendingMomentDiagram', bendingMomentData, {
+                title: 'Bending Moment Diagram',
+                xaxis: { title: 'Position (m)' },
+                yaxis: { title: 'Bending Moment (kNm)' }
+            });
+        }
+    </script>
+</body>
+</html>
